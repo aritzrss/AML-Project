@@ -1,80 +1,197 @@
 """
 01_load_data.py
-FastF1 Project – Data Loading & Caching
-----------------------------------------
-Loads telemetry, lap, and weather data for a given session using the
-FastF1 library and saves them as CSV files for downstream scripts.
+---------------
+Downloads and caches FastF1 telemetry data for ALL drivers across the full
+2024 F1 season (all race rounds).
+Outputs:
+  data/laps.csv                – per-lap data for all drivers & races
+  data/telemetry.csv           – raw telemetry for all laps
+  data/telemetry_labelled.csv  – telemetry + Is_Anomaly column
 
-Usage:
-    python 01_load_data.py
+Runtime: several hours on first run (downloads ~24 race caches, 20 drivers each).
+Subsequent runs are fast thanks to the local cache.
 """
 
+import os
 import fastf1
 import pandas as pd
-from pathlib import Path
+import numpy as np
 
-# ── Configuration ────────────────────────────────────────────────────────────
-YEAR     = 2020
-RACE     = "Silverstone"
-SESSION  = "R"          # 'R' = Race, 'Q' = Qualifying, 'FP1/FP2/FP3' = Practice
-DRIVER   = "HAM"        # 3-letter driver code
-CACHE_DIR  = Path("cache")
-OUTPUT_DIR = Path("data")
+# ── Paths ─────────────────────────────────────────────────────────────────────
+CACHE_DIR = "cache"
+DATA_DIR  = "data"
+os.makedirs(CACHE_DIR, exist_ok=True)
+os.makedirs(DATA_DIR,  exist_ok=True)
 
-# ── Setup ─────────────────────────────────────────────────────────────────────
-CACHE_DIR.mkdir(exist_ok=True)
-OUTPUT_DIR.mkdir(exist_ok=True)
-fastf1.Cache.enable_cache(str(CACHE_DIR))
+fastf1.Cache.enable_cache(CACHE_DIR)
 
-# ── Load Session ──────────────────────────────────────────────────────────────
-print(f"Loading {YEAR} {RACE} – Session: {SESSION} …")
-session = fastf1.get_session(YEAR, RACE, SESSION)
-session.load()
+YEAR = 2025
 
-# ── Laps ──────────────────────────────────────────────────────────────────────
-driver_laps = session.laps.pick_drivers(DRIVER).copy()
-driver_laps = driver_laps.reset_index(drop=True)
+LAP_COLS = [
+    "Driver", "DriverNumber",
+    "LapNumber", "LapTime", "Sector1Time", "Sector2Time", "Sector3Time",
+    "SpeedI1", "SpeedI2", "SpeedFL", "SpeedST",
+    "Compound", "TyreLife", "FreshTyre",
+    "PitOutTime", "PitInTime",
+    "TrackStatus", "IsPersonalBest",
+    "Team",
+]
+TIMEDELTA_COLS = [
+    "LapTime", "Sector1Time", "Sector2Time", "Sector3Time",
+    "PitOutTime", "PitInTime",
+]
+TEL_COLS = ["Time", "Speed", "Throttle", "Brake", "RPM", "nGear", "DRS",
+            "X", "Y", "Z"]
 
-# Convert timedelta columns to seconds for easier analysis
-time_cols = ["LapTime", "Sector1Time", "Sector2Time", "Sector3Time",
-             "PitInTime", "PitOutTime"]
-for col in time_cols:
-    if col in driver_laps.columns:
-        driver_laps[col] = driver_laps[col].dt.total_seconds()
+# ── Discover all 2024 race rounds ─────────────────────────────────────────────
+print(f"Fetching {YEAR} event schedule …")
+schedule = fastf1.get_event_schedule(YEAR, include_testing=False)
+race_rounds = schedule[schedule["EventFormat"] != "testing"]["RoundNumber"].tolist()
+print(f"  Found {len(race_rounds)} race rounds: {race_rounds}\n")
 
-print(f"  Laps loaded   : {len(driver_laps)} laps")
-driver_laps.to_csv(OUTPUT_DIR / "laps.csv", index=False)
-print(f"  Saved → {OUTPUT_DIR}/laps.csv")
+# ── Accumulate data across all rounds ─────────────────────────────────────────
+all_laps      = []
+all_telemetry = []
 
-# ── Telemetry ─────────────────────────────────────────────────────────────────
-# Collect telemetry for every lap and tag each row with lap number
-telemetry_frames = []
-for _, lap in driver_laps.iterrows():
+for rnd in race_rounds:
+    event_name = schedule.loc[
+        schedule["RoundNumber"] == rnd, "EventName"
+    ].values[0]
+
+    print(f"[Round {rnd:02d}] {event_name} …")
+
     try:
-        tel = lap.get_car_data().add_distance()
-        tel["LapNumber"] = lap["LapNumber"]
-        tel["LapTime_s"] = lap["LapTime"]   # already in seconds
-        telemetry_frames.append(tel)
-    except Exception:
-        pass  # skip laps with missing telemetry
+        session = fastf1.get_session(YEAR, rnd, "R")
+        session.load(telemetry=True, laps=True, weather=False, messages=False)
+    except Exception as e:
+        print(f"  ⚠  Could not load session: {e}")
+        continue
 
-telemetry = pd.concat(telemetry_frames, ignore_index=True)
+    # ── Laps (all drivers) ────────────────────────────────────────────────────
+    all_driver_laps = session.laps.reset_index(drop=True)
+    if all_driver_laps.empty:
+        print(f"  ⚠  No laps found for this session")
+        continue
 
-# Drop rows with any NA in core sensor columns
-core_cols = ["Speed", "RPM", "nGear", "Throttle", "Brake", "DRS"]
-telemetry.dropna(subset=core_cols, inplace=True)
+    drivers = all_driver_laps["Driver"].unique()
+    print(f"  Drivers: {sorted(drivers)}")
 
-print(f"  Telemetry rows: {len(telemetry):,}")
-telemetry.to_csv(OUTPUT_DIR / "telemetry.csv", index=False)
-print(f"  Saved → {OUTPUT_DIR}/telemetry.csv")
+    laps_df = all_driver_laps[[c for c in LAP_COLS if c in all_driver_laps.columns]].copy()
 
-# ── Weather ───────────────────────────────────────────────────────────────────
-weather = session.weather_data.copy()
-if weather is not None and not weather.empty:
-    weather.to_csv(OUTPUT_DIR / "weather.csv", index=False)
-    print(f"  Weather rows  : {len(weather)}")
-    print(f"  Saved → {OUTPUT_DIR}/weather.csv")
-else:
-    print("  No weather data available for this session.")
+    for col in TIMEDELTA_COLS:
+        if col in laps_df.columns:
+            laps_df[col] = laps_df[col].dt.total_seconds()
 
-print("\n✓ Data loading complete.")
+    laps_df.insert(0, "Round",     rnd)
+    laps_df.insert(1, "EventName", event_name)
+    all_laps.append(laps_df)
+    print(f"  Total laps: {len(laps_df)}")
+
+    # ── Telemetry (all drivers) ───────────────────────────────────────────────
+    race_tel_frames = []
+    for drv in drivers:
+        driver_laps = all_driver_laps[all_driver_laps["Driver"] == drv]
+        drv_count = 0
+        for _, lap in driver_laps.iterrows():
+            try:
+                tel = lap.get_telemetry()
+                avail = [c for c in TEL_COLS if c in tel.columns]
+                tel   = tel[avail].copy()
+                tel["Driver"]    = drv
+                tel["LapNumber"] = lap["LapNumber"]
+                tel["LapTime_s"] = (
+                    lap["LapTime"].total_seconds()
+                    if pd.notna(lap["LapTime"]) else np.nan
+                )
+                race_tel_frames.append(tel)
+                drv_count += 1
+            except Exception:
+                pass  # silently skip laps with no telemetry
+        if drv_count == 0:
+            print(f"    ⚠  No telemetry for {drv}")
+
+    if race_tel_frames:
+        race_tel = pd.concat(race_tel_frames, ignore_index=True)
+        if "Time" in race_tel.columns:
+            race_tel["Time"] = race_tel["Time"].dt.total_seconds()
+        race_tel.insert(0, "Round",     rnd)
+        race_tel.insert(1, "EventName", event_name)
+        all_telemetry.append(race_tel)
+        print(f"  Telemetry rows: {len(race_tel):,}")
+    else:
+        print(f"  ⚠  No telemetry extracted for this round")
+
+# ── Concatenate & save raw data ───────────────────────────────────────────────
+print("\nConcatenating all rounds …")
+
+laps_all = pd.concat(all_laps, ignore_index=True)
+laps_all.to_csv(f"{DATA_DIR}/laps.csv", index=False)
+print(f"  Saved {DATA_DIR}/laps.csv  "
+      f"({len(laps_all):,} rows | {laps_all['Round'].nunique()} rounds | "
+      f"{laps_all['Driver'].nunique()} drivers)")
+
+telemetry_all = pd.concat(all_telemetry, ignore_index=True)
+telemetry_all.to_csv(f"{DATA_DIR}/telemetry.csv", index=False)
+print(f"  Saved {DATA_DIR}/telemetry.csv  ({len(telemetry_all):,} rows)")
+
+# ── Anomaly labelling (per-race, per-driver z-score on LapTime) ───────────────
+# A lap is anomalous if:
+#   (a) LapTime > driver_race_mean + 1.5 * driver_race_std, OR
+#   (b) TrackStatus != '1'  (safety car, VSC, red flag)
+print("\nLabelling anomalies …")
+
+anomaly_keys = set()  # (Round, Driver, LapNumber) tuples
+
+for (rnd, drv), grp in laps_all.groupby(["Round", "Driver"]):
+    lap_times = grp["LapTime"].dropna()
+    if len(lap_times) < 3:
+        continue
+    thr = lap_times.mean() + 1.5 * lap_times.std()
+
+    for ln in grp.loc[grp["LapTime"] > thr, "LapNumber"]:
+        anomaly_keys.add((rnd, drv, ln))
+
+    if "TrackStatus" in grp.columns:
+        for ln in grp.loc[grp["TrackStatus"] != "1", "LapNumber"]:
+            anomaly_keys.add((rnd, drv, ln))
+
+telemetry_labelled = telemetry_all.copy()
+telemetry_labelled["Is_Anomaly"] = telemetry_labelled.apply(
+    lambda row: int((row["Round"], row["Driver"], row["LapNumber"]) in anomaly_keys),
+    axis=1,
+)
+
+n_anomaly = int(telemetry_labelled["Is_Anomaly"].sum())
+n_total   = len(telemetry_labelled)
+print(f"  Anomaly samples : {n_anomaly:,} / {n_total:,} "
+      f"({100 * n_anomaly / n_total:.2f} %)")
+
+telemetry_labelled.to_csv(f"{DATA_DIR}/telemetry_labelled.csv", index=False)
+print(f"  Saved {DATA_DIR}/telemetry_labelled.csv")
+
+# ── Season summary ────────────────────────────────────────────────────────────
+print("\n── Season summary (laps per driver) ─────────────────────────────────")
+summary = (
+    laps_all.groupby("Driver")
+    .agg(
+        Rounds      =("Round",    "nunique"),
+        TotalLaps   =("LapNumber","count"),
+        AvgLapTime_s=("LapTime",  "mean"),
+    )
+    .sort_values("TotalLaps", ascending=False)
+    .reset_index()
+)
+print(summary.to_string(index=False))
+
+print("\n── Laps per round ───────────────────────────────────────────────────")
+round_summary = (
+    laps_all.groupby(["Round", "EventName"])
+    .agg(
+        Drivers  =("Driver",    "nunique"),
+        TotalLaps=("LapNumber", "count"),
+    )
+    .reset_index()
+)
+print(round_summary.to_string(index=False))
+
+print("\n✅  01_load_data.py complete.")
