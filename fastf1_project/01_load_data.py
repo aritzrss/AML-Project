@@ -18,8 +18,8 @@ import pandas as pd
 import numpy as np
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-CACHE_DIR = "cache"
-DATA_DIR  = "data"
+CACHE_DIR = "../cache"
+DATA_DIR  = "../data"
 os.makedirs(CACHE_DIR, exist_ok=True)
 os.makedirs(DATA_DIR,  exist_ok=True)
 
