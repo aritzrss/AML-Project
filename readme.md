@@ -4,7 +4,7 @@
 ---
 
 ## Project overview
-Anomaly detection on Formula 1 telemetry data (all drivers, full 2024 season) using the **FastF1** Python library. The goal is to identify slow/damaged laps from telemetry sensor data, handle the severe class imbalance between normal and anomaly laps, and prepare clean, augmented time-series features for modelling.
+Anomaly detection on Formula 1 telemetry data (all drivers, full 2025 season) using the **FastF1** Python library. The goal is to identify slow/damaged laps from telemetry sensor data, handle the severe class imbalance between normal and anomaly laps, and prepare clean, augmented time-series features for modelling.
 
 ---
 
@@ -20,14 +20,17 @@ Anomaly detection on Formula 1 telemetry data (all drivers, full 2024 season) us
 ## File structure
 ```
 fastf1_project/
-├── 01_load_data.py              # Download & cache FastF1 2024 (all drivers) → data/
+├── 01_load_data.py              # Download & cache FastF1 2025 (all drivers) → data/
 ├── 02_class_imbalance.py        # Imbalanced data techniques + evaluation
 ├── 03_data_augmentation.py      # Time-series data augmentation (anomaly class)
 ├── 04_data_imputation.py        # Missing data imputation (all methods)
 data/
-├── laps.csv                     # Per-lap data (all drivers, all rounds)
-├── telemetry.csv                # Raw telemetry
-├── telemetry_labelled.csv       # + Is_Anomaly column
+├── laps.csv                     # Per-lap data – timing, tyre, position, weather merged
+├── weather.csv                  # Raw weather time-series per round
+├── results.csv                  # Race results + driver info (grid, points, Q1/Q2/Q3)
+├── race_control.csv             # Race control messages (SC, flags, incidents)
+├── telemetry.csv                # Raw telemetry (Speed, Throttle, Brake, RPM, DRS, XYZ)
+├── telemetry_labelled.csv       # telemetry + Is_Anomaly column
 ├── telemetry_resampled.csv      # Best resampled training set (from script 02)
 ├── telemetry_augmented.csv      # Augmented anomaly samples (from script 03)
 ├── telemetry_imputed.csv        # Final imputed dataset with missingness indicators

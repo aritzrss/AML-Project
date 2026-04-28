@@ -221,15 +221,14 @@ if len(aug_samples) == 1:
     axes = axes[np.newaxis, :]
 
 speed_idx = feature_cols.index("Speed") if "Speed" in feature_cols else 0
-sample_orig = X_min[0]
+n_show    = min(2000, len(X_min))   # cap for plot readability
 
 for i, (name, X_aug) in enumerate(aug_samples.items()):
-    axes[i, 0].plot(sample_orig[:, speed_idx], color="#4C78A8", lw=1.5)
-    axes[i, 0].set_title(f"Original – Speed")
+    axes[i, 0].plot(X_min[:n_show, speed_idx], color="#4C78A8", lw=0.8)
+    axes[i, 0].set_title("Original – Speed (anomaly samples)")
     axes[i, 0].set_ylabel("km/h")
 
-    axes[i, 1].plot(X_aug[0, :, speed_idx] if X_aug.ndim == 3
-                    else X_aug[0], color="#E45756", lw=1.5)
+    axes[i, 1].plot(X_aug[:n_show, speed_idx], color="#E45756", lw=0.8)
     axes[i, 1].set_title(f"{name} – Speed (augmented)")
 
 fig.suptitle("Data Augmentation – Anomaly Lap (Speed channel)", fontsize=13)
