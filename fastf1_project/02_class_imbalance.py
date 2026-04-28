@@ -108,8 +108,8 @@ del X
 gc.collect()
 
 scaler  = StandardScaler()
-X_tr_sc = scaler.fit_transform(X_tr).astype(np.float32)
-X_te_sc = scaler.transform(X_te).astype(np.float32)
+X_tr_sc = np.nan_to_num(scaler.fit_transform(X_tr), nan=0.0).astype(np.float32)
+X_te_sc = np.nan_to_num(scaler.transform(X_te),     nan=0.0).astype(np.float32)
 del X_tr, X_te
 gc.collect()
 print(f"    Train: {len(y_tr):,}  |  Test: {len(y_te):,}{_mem()}")
@@ -129,7 +129,12 @@ def evaluate(X_train, y_train, X_test, y_test,
         random_state=RANDOM_STATE, n_jobs=-1,
     )
     clf.fit(X_train, y_train)
-    proba = clf.predict_proba(X_test)[:, 1]
+    proba_arr = clf.predict_proba(X_test)
+    # Guard: if only one class in training data, predict_proba returns 1 column
+    if 1 in clf.classes_:
+        proba = proba_arr[:, list(clf.classes_).index(1)]
+    else:
+        proba = np.zeros(len(X_test), dtype=np.float32)
     del clf   # free the forest immediately
 
     pred   = (proba >= threshold).astype(np.int8)
@@ -214,6 +219,7 @@ for name, sampler in samplers.items():
 print("\n[4] Optimal threshold via Youden J ...")
 fpr_c, tpr_c, thresholds = roc_curve(y_te, proba_bal)
 best_idx = int(np.argmax(tpr_c - fpr_c))
+best_idx = min(best_idx, len(thresholds) - 1)   # clip: tpr_c/fpr_c may be 1 longer than thresholds
 best_thr = float(thresholds[best_idx])
 pred_opt = (proba_bal >= best_thr).astype(int)
 del proba_bal

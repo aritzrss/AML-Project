@@ -168,30 +168,32 @@ print("\nEvaluating effect of augmentation ...")
 scaler = StandardScaler()
 
 # Before
-X_tr_sc  = scaler.fit_transform(X_tr)
-X_te_sc  = scaler.transform(X_te)
+X_tr_sc  = np.nan_to_num(scaler.fit_transform(X_tr), nan=0.0)
+X_te_sc  = np.nan_to_num(scaler.transform(X_te),     nan=0.0)
 clf_base = RandomForestClassifier(n_estimators=100, class_weight="balanced",
                                    random_state=RANDOM_STATE, n_jobs=-1)
 clf_base.fit(X_tr_sc, y_tr)
 pred_base = clf_base.predict(X_te_sc)
 f1_base   = f1_score(y_te, pred_base, pos_label=1, zero_division=0)
 try:
-    auc_base = roc_auc_score(y_te, clf_base.predict_proba(X_te_sc)[:,1])
+    p = clf_base.predict_proba(X_te_sc)
+    auc_base = roc_auc_score(y_te, p[:, list(clf_base.classes_).index(1)] if 1 in clf_base.classes_ else p[:, 0])
 except Exception:
     auc_base = 0.5
 print(f"    Before augmentation  →  F1={f1_base:.4f}  AUC={auc_base:.4f}")
 
 # After
 scaler2     = StandardScaler()
-X_tr_aug_sc = scaler2.fit_transform(X_train_aug)
-X_te_aug_sc = scaler2.transform(X_te)
+X_tr_aug_sc = np.nan_to_num(scaler2.fit_transform(X_train_aug), nan=0.0)
+X_te_aug_sc = np.nan_to_num(scaler2.transform(X_te),           nan=0.0)
 clf_aug  = RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE,
                                    n_jobs=-1)
 clf_aug.fit(X_tr_aug_sc, y_train_aug)
 pred_aug = clf_aug.predict(X_te_aug_sc)
 f1_aug   = f1_score(y_te, pred_aug, pos_label=1, zero_division=0)
 try:
-    auc_aug = roc_auc_score(y_te, clf_aug.predict_proba(X_te_aug_sc)[:,1])
+    p = clf_aug.predict_proba(X_te_aug_sc)
+    auc_aug = roc_auc_score(y_te, p[:, list(clf_aug.classes_).index(1)] if 1 in clf_aug.classes_ else p[:, 0])
 except Exception:
     auc_aug = 0.5
 print(f"    After  augmentation  →  F1={f1_aug:.4f}  AUC={auc_aug:.4f}")
