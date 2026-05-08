@@ -13,15 +13,17 @@ Anomaly detection on Formula 1 telemetry data (all drivers, full 2025 season) us
 | Deliverable | Scope | Notebook |
 |---|---|---|
 | **Delivery 1** | Imbalanced data + Data augmentation + Data imputation | `deliverable1_fastf1_2025.ipynb` |
-| **Delivery 2** | Forecasting / anomaly detection model | *(upcoming)* |
+| **Delivery 2** | Forecasting / anomaly detection model | `exporatoryda.ipynb` (EDA + 3D tensor prep – modelling stage upcoming) |
+
+`exporatoryda.ipynb` is independent of Delivery 1 — it pulls its own subset from FastF1, defines its own minority class (laps ≥ 5 % slower than the driver's median), runs EDA plots across the four telemetry categories (car telemetry, track/positioning, lap/tire/sector, weather), and builds the 3D tensor that Delivery 2 will train on.
 
 ---
 
 ## Project tree
 ```
 AML-Project/
-├── deliverable1_fastf1_2025.ipynb   # Combined notebook: load → imbalance → augment → impute
-├── exporatoryda.ipynb               # Exploratory data analysis on the saved CSVs
+├── deliverable1_fastf1_2025.ipynb   # Delivery 1: load → imbalance → augment → impute
+├── exporatoryda.ipynb               # Standalone EDA + 3D tensor prep for Delivery 2
 ├── readme.md
 ├── cache/                           # FastF1 local cache (auto-populated, gitignored)
 ├── data/                            # All generated CSVs (gitignored)
