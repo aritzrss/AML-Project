@@ -1,0 +1,2 @@
+add a race simulation, in which every lap a safety car % is calculated based, on all the cars race pace, proximity during lap, and car damage if data is available.
+when safety car is deployed, generate a prediction on which compound should be replaced, or if it not worth it to pit yet.
